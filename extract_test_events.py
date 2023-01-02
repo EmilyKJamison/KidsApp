@@ -309,11 +309,16 @@ def are_sibling_nodes(common_node_list):
 	return are_siblings
 			
 
-
 def get_events_in_a_file(filename, a_event_location, tsv_file):
+    with open(filename) as fp:
+        get_events_from_a_string(fp, filename, a_event_location, tsv_file)
 
-	with open(filename) as fp:
-	    soup = BeautifulSoup(fp, 'html.parser')
+
+def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_file):
+
+	tsv_file.write("TITLE (first text node)\tDATE\tDATETEXT\tLOCATION\tFIRST_LINK\tFIRST_IMG\n")
+
+	soup = BeautifulSoup(a_html_string, 'html.parser')
 
 	end_node_with_only_text = soup.find_all(is_end_node_with_only_text)
 	middle_node_with_direct_text = soup.find_all(is_middle_node_with_direct_text)
@@ -323,7 +328,7 @@ def get_events_in_a_file(filename, a_event_location, tsv_file):
 
 	date_nodes = [] # list of tuple (node, datetime)
 	
-	print('\n\n\n' + filename + ' events:')
+	print('\n\n\n' + page_title + ' events:')
 
 	# Get nodes that only have child text
 	for node in end_node_with_only_text:
@@ -428,28 +433,30 @@ def get_events_in_a_file(filename, a_event_location, tsv_file):
 			print('ALLTEXT: ' + clean_spacing(top_event_node.get_text().replace('\n', ' ')))
 
 
-# Get proper directories:
-path = os.getcwd()
-parent_path = os.path.abspath(os.path.join(path, os.pardir))
+
+# This section only runs when this file is run stand-alone.
+if __name__ == '__main__':
+	# Get proper directories:
+	path = os.getcwd()
+	parent_path = os.path.abspath(os.path.join(path, os.pardir))
 
 
-datalist_file = open(parent_path + "/Data/SampleURLLocations/" + 'datalist.tsv', 'r')
+	datalist_file = open(parent_path + "/Data/SampleURLLocations/" + 'datalist.tsv', 'r')
 
-# Create a new tsv file of events for Ross
-tsv_file = open(parent_path + "/Data/ExtractedEvents/" + "all_events.tsv", 'w')
-tsv_file.write("TITLE (first text node)\tDATE\tDATETEXT\tLOCATION\tFIRST_LINK\tFIRST_IMG\n")
+	# Create a new tsv file of events for Ross
+	tsv_file = open(parent_path + "/Data/ExtractedEvents/" + "all_events.tsv", 'w')
 	
-line = datalist_file.readline()
-while line != "":
-	if line[0] != '#' and len(line.split('\t')) == 3: # for comments
-		a_data_file, a_event_location = line.split('\t')[0:2] #data file is the filename, event location is like 'Boston MA'
-		a_data_file = parent_path + "/Data/SampleHTML/" + a_data_file
-		get_events_in_a_file(a_data_file, a_event_location, tsv_file)
+	
 	line = datalist_file.readline()
-datalist_file.close()
-tsv_file.close()
+	while line != "":
+		if line[0] != '#' and len(line.split('\t')) == 3: # for comments
+			a_data_file, a_event_location = line.split('\t')[0:2] #data file is the filename, event location is like 'Boston MA'
+			a_data_file = parent_path + "/Data/SampleHTML/" + a_data_file
+			get_events_in_a_file(a_data_file, a_event_location, tsv_file)
+		line = datalist_file.readline()
+	datalist_file.close()
+	tsv_file.close()
 
-	
 
 
 

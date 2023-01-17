@@ -219,6 +219,18 @@ def clean_spacing(text):
 		text = text.replace('  ', ' ').replace('\n', ' ')
 	return text
 	
+def complete_link(a_url, page_url):
+	if a_url.startswith('http') or a_url.startswith('//www.'):
+		return a_url
+	elif len(a_url) < 5 or not '/' in a_url:
+		return a_url
+	else:
+		local_dir = a_url.split('/')[1]
+		if local_dir in page_url:
+			return page_url + '/' + '/'.join(a_url.split('/')[2:])
+		else:
+			return page_url + a_url
+	
 # from: https://stackoverflow.com/questions/54265391/find-all-end-nodes-that-contain-text-using-beautifulsoup4
 def is_end_node_with_only_text(tag):
 	# Good but misses the text + tag nodes
@@ -337,7 +349,7 @@ def get_events_from_url_list(url_list_filename, tsv_file):
 	url_file.close()
 
 
-def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_file):
+def get_events_from_a_string(a_html_string, a_url, a_event_location, tsv_file):
 
 	soup = BeautifulSoup(a_html_string, 'html.parser')
 
@@ -349,7 +361,7 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 
 	date_nodes = [] # list of tuple (node, datetime)
 	
-	print('\n\n\n' + page_title + ' events:')
+	print('\n\n\n' + a_url + ' events:')
 
 	# Get nodes that only have child text
 	for node in end_node_with_only_text:
@@ -429,11 +441,9 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 				
 				
 			
-			if 'http' in page_title:
-				tsv_line = page_title
-			else:
-				tsv_line = sanitize(os.path.basename(page_title))
-			tsv_line = page_title.split('Data')
+			tsv_line = a_url
+			#tsv_line = sanitize(os.path.basename(a_url)) # this was for the downloaded set of test files
+			#tsv_line = a_url.split('Data')
 			tsv_line = tsv_line + "\t" + sanitize(title) # truncated for readability
 			tsv_line = tsv_line + "\t" + sanitize(date_nodes[d][1].strftime('%m-%d-%Y'))
 			tsv_line = tsv_line + "\t" + sanitize(date_node.get_text().strip()[:100]) #truncated
@@ -451,10 +461,13 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 				if link.get('href') and not 'javascript:void(0);' in link.get('href'):
 					links.append(link.get('href'))
 					print("LINK: " + link.get('href')[:50] + ' [...]')
+			
 			if len(links) > 0:
-				tsv_line = tsv_line + "\t" + sanitize(links[0][0:100])
+				first_link = complete_link(links[0], a_url)
+				tsv_line = tsv_line + "\t" + sanitize(first_link) # was sanitize(first_link[0:100])
 			else:
 				tsv_line = tsv_line + "\t"
+			
 				
 			imgs = []
 			for img in top_event_node.find_all('img'):
@@ -464,8 +477,10 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 				else:
 					imgs.append('IMG: Unknown Source')
 					print('IMG: Unknown Source')
+			
 			if len(imgs) > 0:
-				tsv_line = tsv_line + "\t" + sanitize(imgs[0][0:100])
+				first_img = complete_link(imgs[0], a_url)
+				tsv_line = tsv_line + "\t" + sanitize(first_img)
 			else:
 				tsv_line = tsv_line + "\t"
 			

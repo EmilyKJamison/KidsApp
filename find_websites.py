@@ -115,6 +115,7 @@ a_html = requests.get(good_url).text
     
 # Try extracting events
 tsv_file = open(parent_path + "/Data/ExtractedEvents/test_events.tsv", 'w')
+extract_test_events.print_tsv_header(tsv_file)
 extract_test_events.get_events_from_a_string(str(a_html), good_url, a_city_and_state, tsv_file)
     
 

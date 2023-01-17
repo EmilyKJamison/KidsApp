@@ -10,6 +10,7 @@ from dateutil.parser import parse
 import datetime
 import re
 import os
+import requests
 
 import location_processing as lp #EJ file
 
@@ -307,16 +308,36 @@ def are_sibling_nodes(common_node_list):
 			j +=1
 		i +=1
 	return are_siblings
+	
+def sanitize(a_string):
+	return a_string.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ').strip()
+	
+def print_tsv_header(tsv_file):
+	tsv_file.write("URL\tTITLE (first text node)\tDATE\tDATETEXT (truncated 100 chars)\tLOCATION (hard-coded)\tCOST\tGRADES\tAGES\tKID KEYWORDS\tFIRST_LINK (in event) \tFIRST_IMG (in event)\tALL EVENT TEXT\n")
+	return
 			
 
 def get_events_in_a_file(filename, a_event_location, tsv_file):
     with open(filename) as fp:
         get_events_from_a_string(fp, filename, a_event_location, tsv_file)
+        
+def get_events_from_url_list(url_list_filename, tsv_file):
+	url_file = open(url_list_filename, 'r')
+	line = url_file.readline()
+	while line != "":
+		if line[0] != '#' and len(line.split('\t')) == 2: # for comments
+			a_url = line.split('\t')[0]
+			a_location = line.split('\t')[1]
+			print("327 Getting html: " + a_url)
+			a_html = requests.get(a_url).text
+			print("Retrieved html: " + a_html[0:200])
+			print("329 Extracting events...")
+			get_events_from_a_string(str(a_html), a_url, a_location, tsv_file)
+		line = url_file.readline()
+	url_file.close()
 
 
 def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_file):
-
-	tsv_file.write("TITLE (first text node)\tDATE\tDATETEXT\tLOCATION\tFIRST_LINK\tFIRST_IMG\n")
 
 	soup = BeautifulSoup(a_html_string, 'html.parser')
 
@@ -383,10 +404,6 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 					#print("INFO: " + clean_spacing(an_event_info.replace('\n', ' ')))
 					
 			
-			tsv_line = title # truncated for readability
-			tsv_line = tsv_line + "\t" + date_nodes[d][1].strftime('%m-%d-%Y')
-			tsv_line = tsv_line + "\t" + date_node.get_text().strip()[:100] #truncated
-			tsv_line = tsv_line + "\t" + a_event_location.strip()
 		
 			print("DATE: " + date_nodes[d][1].strftime('%m-%d-%Y'))
 			
@@ -406,16 +423,39 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 			if len(kid_keywords) > 0:
 				print('KID WORDS: ' + ', '.join(kid_keywords))
 				
+			detected_location = lp.get_entire_detected_address(top_event_node.get_text().replace('\n', ' '))
+			if len(detected_location) > 0:
+				print('DETECTED LOCATION: ' + detected_location)
+				
+				
+			
+			if 'http' in page_title:
+				tsv_line = page_title
+			else:
+				tsv_line = sanitize(os.path.basename(page_title))
+			tsv_line = page_title.split('Data')
+			tsv_line = tsv_line + "\t" + sanitize(title) # truncated for readability
+			tsv_line = tsv_line + "\t" + sanitize(date_nodes[d][1].strftime('%m-%d-%Y'))
+			tsv_line = tsv_line + "\t" + sanitize(date_node.get_text().strip()[:100]) #truncated
+			tsv_line = tsv_line + "\t" + sanitize(a_event_location)
+			tsv_line = tsv_line + "\t" + sanitize(','.join(costs))
+			tsv_line = tsv_line + "\t" + sanitize(','.join(grades))
+			tsv_line = tsv_line + "\t" + sanitize(','.join(ages))
+			tsv_line = tsv_line + "\t" + sanitize(', '.join(kid_keywords))
+			#tsv_line = tsv_line + "\t" + detected_location.strip() #disabled for now because almost no events have a listed street address
+				
+				
 			
 			links = []
 			for link in top_event_node.find_all('a'):
-				if not 'javascript:void(0);' in link.get('href'):
+				if link.get('href') and not 'javascript:void(0);' in link.get('href'):
 					links.append(link.get('href'))
 					print("LINK: " + link.get('href')[:50] + ' [...]')
 			if len(links) > 0:
-				tsv_line = tsv_line + "\t" + links[0]
+				tsv_line = tsv_line + "\t" + sanitize(links[0][0:100])
 			else:
 				tsv_line = tsv_line + "\t"
+				
 			imgs = []
 			for img in top_event_node.find_all('img'):
 				if 'src' in img.attrs.keys():
@@ -425,12 +465,13 @@ def get_events_from_a_string(a_html_string, page_title, a_event_location, tsv_fi
 					imgs.append('IMG: Unknown Source')
 					print('IMG: Unknown Source')
 			if len(imgs) > 0:
-				tsv_line = tsv_line + "\t" + imgs[0]
+				tsv_line = tsv_line + "\t" + sanitize(imgs[0][0:100])
 			else:
 				tsv_line = tsv_line + "\t"
 			
-			tsv_file.write(clean_spacing(tsv_line.replace('\n', '')) + "\n")
-			print('ALLTEXT: ' + clean_spacing(top_event_node.get_text().replace('\n', ' ')))
+			tsv_line = tsv_line + "\t" + sanitize(clean_spacing(top_event_node.get_text())[0:100])
+			tsv_file.write(clean_spacing(tsv_line) + "\n")
+			print('ALLTEXT: ' + sanitize(clean_spacing(top_event_node.get_text())))
 
 
 
@@ -440,13 +481,15 @@ if __name__ == '__main__':
 	path = os.getcwd()
 	parent_path = os.path.abspath(os.path.join(path, os.pardir))
 
-
-	datalist_file = open(parent_path + "/Data/SampleURLLocations/" + 'datalist.tsv', 'r')
-
 	# Create a new tsv file of events for Ross
 	tsv_file = open(parent_path + "/Data/ExtractedEvents/" + "all_events.tsv", 'w')
-	
-	
+	print_tsv_header(tsv_file)
+
+
+	"""
+	# Saved HTML Option...
+	datalist_file = open(parent_path + "/Data/SampleURLLocations/" + 'datalist.tsv', 'r')
+
 	line = datalist_file.readline()
 	while line != "":
 		if line[0] != '#' and len(line.split('\t')) == 3: # for comments
@@ -455,9 +498,15 @@ if __name__ == '__main__':
 			get_events_in_a_file(a_data_file, a_event_location, tsv_file)
 		line = datalist_file.readline()
 	datalist_file.close()
+	"""	
+
+	# URL List Option...
+	datalist_filename = parent_path + "/Data/SampleURLLocations/" + "datalist_Chicago.tsv"
+	get_events_from_url_list(datalist_filename, tsv_file)
+	
+	
+	
 	tsv_file.close()
-
-
 
 
 # Test code: this shows our date function is working.
